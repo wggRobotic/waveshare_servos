@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <limits>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -90,6 +91,9 @@ private:
     std::vector<double> pos_offsets_;
     // per-joint inversion flag (true => invert direction)
     std::vector<bool> inverted_;
+    // per-joint command limits (optional, read from command_interface params)
+    std::vector<double> pos_mins_;
+    std::vector<double> pos_maxs_;
     // array variables for motors
     u8*  p_ids_pnt_;
     u8*  v_ids_pnt_;

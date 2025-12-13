@@ -18,6 +18,8 @@ WaveshareServos::on_init(const hardware_interface::HardwareInfo &info) {
   // check urdf definitions
   pos_offsets_.resize(info_.joints.size(), 0.0);
   inverted_.resize(info_.joints.size(), false);
+  pos_mins_.resize(info_.joints.size(), -std::numeric_limits<double>::infinity());
+  pos_maxs_.resize(info_.joints.size(), std::numeric_limits<double>::infinity());
   int i = 0;
   for (const hardware_interface::ComponentInfo &joint : info_.joints) {
     all_ids_.emplace_back(std::stoul(joint.parameters.find("id")->second));
@@ -63,6 +65,25 @@ WaveshareServos::on_init(const hardware_interface::HardwareInfo &info) {
                      "a joint is using a command interface that isn't position "
                      "or velocity");
         return hardware_interface::CallbackReturn::ERROR;
+      }
+      // read optional min/max from the position command_interface params
+      if (joint.command_interfaces[ci].name == hardware_interface::HW_IF_POSITION) {
+        auto it_min = joint.command_interfaces[ci].parameters.find("min");
+        auto it_max = joint.command_interfaces[ci].parameters.find("max");
+        if (it_min != joint.command_interfaces[ci].parameters.end()) {
+          try {
+            pos_mins_[i] = std::stod(it_min->second);
+          } catch (...) {
+            // leave default
+          }
+        }
+        if (it_max != joint.command_interfaces[ci].parameters.end()) {
+          try {
+            pos_maxs_[i] = std::stod(it_max->second);
+          } catch (...) {
+            // leave default
+          }
+        }
       }
     }
     // store ids in different vectors by type
@@ -226,8 +247,12 @@ WaveshareServos::write(const rclcpp::Time & /*time*/,
   for (size_t i = 0; i < pos_is_.size(); i++) {
     int j = pos_is_[i];
     double sign = (inverted_[j] ? -1.0 : 1.0);
+    // Clamp commanded position to configured limits (if provided)
+    double cmd_pos = pos_cmds_[j];
+    if (cmd_pos < pos_mins_[j]) cmd_pos = pos_mins_[j];
+    if (cmd_pos > pos_maxs_[j]) cmd_pos = pos_maxs_[j];
     // Convert commanded (controller) value back to raw servo units
-    double pos = sign * pos_cmds_[j] + pos_offsets_[j];
+    double pos = sign * cmd_pos + pos_offsets_[j];
     p_pos_ar_[i] = static_cast<s16>((pos * steps_) / (2 * M_PI));
     p_vel_ar_[i] = static_cast<u16>((sign * vel_cmds_[j] * steps_) / (2 * M_PI));
   }
